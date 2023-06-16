@@ -1,12 +1,30 @@
 import tensorflow as tf
 import numpy as np
+import random
 class VideoModel(tf.keras.Model):
     def __init__(self, delta, k, mu, d, scale):
         super().__init__(self)
         self.g = ActionClassifier(delta, k, mu, d)
         self.h = StateClassifier(delta, d)
         self.l = scale
-        
+    def numpyFitMethod(self, dataset, epochs, batch_size):
+        #make dataset a LIST of numpy arrays, where each array is a video. 
+        numBatches = len(dataset)//batch_size
+        for i in range(epochs):
+            shuffledData = random.sample(dataset, len(dataset))
+            sumEpochTotal = 0
+            sumEpochG = 0
+            sumEpochH = 0
+            for j in range(numBatches):
+                #list of size batchSize of videos. 
+                batchData = shuffledData[j*batch_size:(j+1)*batch_size]
+                totalLoss, gLoss, hLoss = self.train_step(batchData)
+                sumEpochTotal+= totalLoss
+                sumEpochG+=gLoss
+                sumEpochH+=hLoss
+            print("Epoch {epoch}: Total Loss: {total} G loss: {g} H loss: {h}".format(epoch = i, total = sumEpochTotal, g = sumEpochG, h= sumEpochH))
+
+
     def train_step(self, videos):
         """
         Called on each step of the training algorithm. 
@@ -19,21 +37,18 @@ class VideoModel(tf.keras.Model):
         #assume we have a list of videos. 
         #step 1: find labels for each category. 
         
-        print(tf.executing_eagerly())
-        print(videos.shape)
-        print(videos.values.numpy())
+
         with tf.GradientTape() as tape:
             sumGLoss = 0
             sumHLoss = 0
             #hopefully summing the losses of each video works well. 
-            """=
+            
             for video in videos:
                 videoLabels = self.generate_new_labels(video)
                 gLoss, hLoss = self.train_step_classifiers((video, videoLabels))
                 sumGLoss+=gLoss
                 sumHLoss+=hLoss
-            """
-            sumGLoss, sumHLoss = self.doMap(videos)
+            
             totalLoss = sumHLoss + self.l*sumGLoss
         """
         gradG = tape.gradient(sumGLoss, self.g.trainable_weights)
@@ -58,8 +73,6 @@ class VideoModel(tf.keras.Model):
         """
         video = videoLabelPair[0]
         labels = videoLabelPair[1]
-        print("video: ", video)
-        print("labels: ", labels)
         gLoss = self.g.compute_loss(video, labels[1])
         hLoss = self.h.compute_loss(video, np.array([labels[0], labels[2]]))
         return (gLoss, hLoss)
@@ -75,8 +88,6 @@ class VideoModel(tf.keras.Model):
         hEnd = hValues[:, 1]
         #this method finds the max pair according to the causal ordering constraint. 
         labels = self.findMaxPair(hInitial, gValues, hEnd)
-        print(labels)
-        #assert(labels[0]<labels[1] and labels[1]<labels[2])
         return labels
    
     def findMaxPair(self, hInitial, gValues, hEnd):
@@ -85,7 +96,6 @@ class VideoModel(tf.keras.Model):
         Method to find the max pair. 
         """
         videoLen = gValues.shape[0]
-        print("video len: ", videoLen)
         #s1 x sl x s2
         validTuples = np.ones(shape = (videoLen, videoLen, videoLen), dtype = bool)
         #last 2 indices 0. 
@@ -112,26 +122,17 @@ class VideoModel(tf.keras.Model):
         assert(validTuples[0, 2, 1] == 0)
         assert(validTuples[2, 1, 3] == 0)
         assert(validTuples[3, 1, 2] == 0)
-        
-        print(hInitial.shape)
-        print(gValues.shape)
-        print(hEnd.shape)
+        #not sure this gets the values we want. 
         productArray = tf.tensordot(hInitial, gValues, axes=0)
         productTensor = tf.tensordot(productArray, hEnd, axes=0)
-        #print(productTensor[0,1,2])
-        #print(hInitial[0]*gValues[1]*hEnd[2])
+  
 
         #assert(productTensor[0, 1, 2] ==hInitial[0]*gValues[1]*hEnd[2])
         #if it works, can multiply by the triangular matrix to get zeros. 
-        print(productTensor.shape)
-        print(validTuples.shape)
         weightedArray =  productTensor*validTuples
-        print(weightedArray.shape)
         #changed shape to dims when going to tf from np
-        print(tf.math.argmax(tf.reshape(weightedArray, (-1,)), axis=None))
-        finalIndices = tf.cast(tf.unravel_index(tf.argmax(tf.reshape(weightedArray, (-1,))), dims = (videoLen, videoLen, videoLen)), tf.int32)
-        #print(finalIndices)
-        #print(weightedArray[finalIndices])
+       
+        finalIndices =tf.unravel_index(tf.argmax(tf.reshape(weightedArray, shape = (-1, )), axis=None), dims = (videoLen, videoLen, videoLen))
         return finalIndices
     def testCalcMax(self):
         gValues = np.array([.4, .2, .1, .5, .6])
@@ -164,7 +165,8 @@ class ActionClassifier(tf.keras.Model):
     def call(self, video):
         intermediate = self.dense1(video)
         assert(intermediate.shape == (video.shape[0], 512))
-        output = tf.squeeze(self.dense2(intermediate))
+        #don't want output shape to have a 1. Messes with tensor product. Does this bc it thinks first dim is batch. 
+        output = tf.reshape(self.dense2(intermediate), shape = (-1, ))
         assert(output.shape == (video.shape[0],))
         return output
 
@@ -182,15 +184,19 @@ class ActionClassifier(tf.keras.Model):
         #code here designed for ONE video, ie a batch size of 1, so that the length of the video is uniform, because that's needed. 
         #video is numFrames x featureVector. 
         videoLen = video.shape[-2]
+        print("label: ", label)
         #works for both batch size and no batch size. Doesnt work if make numFrames the last thing. 
         positive, negative = self.computePositiveAndNegativeExamples(videoLen, label)
+        print("positive: ", positive)
+        print("negative: ", negative)
         #call the model. Want results of size videoLen x 1. 
-        gPos = self(video[positive, :])
-        gNeg = self(video[negative,:])
-
+        gPos = self(tf.gather(video, positive, axis=0))
+        gNeg = self(tf.gather(video, negative, axis=0))
+        
         #assuming  numpy but might have to change. 
-        positiveTerm = -1*tf.sum(tf.log(gPos))
-        negativeTerm = -1*tf.sum(1-tf.log(gNeg))
+        positiveTerm = -1*tf.reduce_sum(tf.math.log(gPos), -1)
+        #had a mistake here with the negative 1. 
+        negativeTerm = -1*tf.reduce_sum(tf.math.log(1-gNeg), -1)
         loss = self.mu*positiveTerm + negativeTerm
         return loss
     def computePositiveAndNegativeExamples(self, videoLen, label):
@@ -205,22 +211,20 @@ class ActionClassifier(tf.keras.Model):
         #if label+self.delta = videoLen then end already included. 
         if label+self.delta>videoLen:
             end = videoLen
-        #don't include the end index. 
-        #np.arange -> tf.range
-        #stop -> limit
-        #step -> delta
-        positiveExampleIndices = tf.range(start = start, limit = end, delta = 1, dtype = tf.int32)
+        #THIS DOESN'T NEED TENSORFLOW
+        #added end + 1 because we DO need the end index here. 
+        positiveExampleIndices =np.arange(start = start, stop = end+1, step = 1, dtype = np.int32)
 
         negativeExamplesPlus = positiveExampleIndices + self.k
         negativeExamplesMinus = positiveExampleIndices - self.k
-        validNegPlus = tf.cast(negativeExamplesPlus < videoLen, tf.int32)
-        validNegMinus= tf.cast(negativeExamplesMinus >=0,tf.int32)
+        validNegPlus = negativeExamplesPlus<videoLen
+        validNegMinus= negativeExamplesMinus >=0
         #the actual value where it's valid, a -1 where it isn't. 
-        examplesPlus =(negativeExamplesPlus*validNegPlus - negativeExamplesPlus*tf.cast(tf.math.logical_not(tf.cast(validNegPlus, bool)), tf.int32))
-        examplesMinus = (negativeExamplesMinus*validNegMinus - negativeExamplesMinus*tf.cast(tf.math.logical_not(tf.cast(validNegMinus, bool)), tf.int32))
-        examples = tf.concatenate([examplesPlus, examplesMinus], axis=None)
+        examplesPlus =negativeExamplesPlus*validNegPlus - negativeExamplesPlus*np.logical_not(validNegPlus)
+        examplesMinus = negativeExamplesMinus*validNegMinus - negativeExamplesMinus*np.logical_not(validNegMinus)
+        examples = np.concatenate([examplesPlus, examplesMinus], axis=None)
         #need to get rid of the -1 as well. 
-        negativeExamples = tf.unique(examples)
+        negativeExamples = np.unique(examples)
         #should be sorted in ascending order. 
         if negativeExamples[0]==-1:
             negativeExamples = negativeExamples[1:]
@@ -264,10 +268,10 @@ class StateClassifier(tf.keras.Model):
         """
         videoLen = video.shape[-2]
         initLabelPos, endLabelPos = self.samplePosExamples(videoLen, labels)
-        hPos = self(video[initLabelPos, :])
-        hNeg = self(video[endLabelPos, :])
-        hPosLoss = -1*np.sum(np.log(hPos))
-        hNegLoss = -1*np.sum(np.log(hNeg))
+        hPos = self(tf.gather(video, initLabelPos, axis=0))
+        hNeg = self(tf.gather(video, endLabelPos, axis=0))
+        hPosLoss = -1*tf.reduce_sum(tf.math.log(hPos))
+        hNegLoss = -1*tf.reduce_sum(tf.math.log(hNeg))
         loss = hPosLoss + hNegLoss
         return loss
 

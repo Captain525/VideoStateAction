@@ -10,8 +10,8 @@ def runModel():
     """
     Run the model with data. 
     """
-    loadedData, size, frameNumbers= loadData()
-    raggedTensor = tf.RaggedTensor.from_row_lengths(tf.constant(loadedData), row_lengths = frameNumbers)
+    loadedData, size = loadDataNumpy()
+    #raggedTensor = tf.RaggedTensor.from_row_lengths(tf.constant(loadedData), row_lengths = frameNumbers)
     #newRaggedTensor = tf.repeat(raggedTensor, repeats = 5, axis=0)
     #raggedTensor = tf.ragged.constant(tensorList, ragged_rank = 1)
     #print(newRaggedTensor.shape)
@@ -23,10 +23,20 @@ def runModel():
 
     model = VideoModel(delta, k, mu, d, scale)
     model.compile(optimizer = 'adam', run_eagerly = True)
-    model.fit(raggedTensor, epochs = 10, batch_size = 2)
+    model.numpyFitMethod(loadedData, epochs = 10, batch_size = 2)
     
 
+def loadDataNumpy():
+    listArrays = []
+    listData = ["Apple0", "Apple1"]
+    path = os.getcwd() + "/transformedData"
 
+    for data in listData:
+        loadedArray = tf.constant(np.squeeze(np.load(path + "/" + data)), tf.float32)
+        print(loadedArray.shape)
+        size = loadedArray.shape[-1]
+        listArrays.append(loadedArray)
+    return listArrays, size
 def loadData():
     path = os.getcwd() + "/transformedData"
     array0 = np.squeeze(np.load(path + "/Apple0"))
