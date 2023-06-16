@@ -42,28 +42,26 @@ class VideoModel(tf.keras.Model):
             sumGLoss = 0
             sumHLoss = 0
             #hopefully summing the losses of each video works well. 
-            
+            """
             for video in videos:
                 videoLabels = self.generate_new_labels(video)
                 gLoss, hLoss = self.train_step_classifiers((video, videoLabels))
                 sumGLoss+=gLoss
                 sumHLoss+=hLoss
-            
+            """
+            sumGLoss, sumHLoss = self.doMap(videos)
             totalLoss = sumHLoss + self.l*sumGLoss
-        """
-        gradG = tape.gradient(sumGLoss, self.g.trainable_weights)
-        gradH = tape.gradient(sumHLoss, self.h.trainable_weights)
-        self.optimizer.apply_gradients(zip(gradG, self.g.trainable_weights))
-        self.optimizer.apply_gradients(zip(gradH, self.h.trainable_weights))
-        """
+        #gradient tape can only do one at a time. 
+        print("trainable weights: ", len(self.trainable_weights))
         grad = tape.gradient(totalLoss, self.trainable_weights)
         self.optimizer.apply_gradients(zip(grad, self.trainable_weights))
-        return totalLoss, sumGLoss, sumHLoss
+        return {"totalLoss": totalLoss, "sumGLoss":sumGLoss, "sumHLoss":sumHLoss}
     def doMap(self, videos):
-        listLabels = tf.map_fn(self.generate_new_labels, videos, dtype=tf.int32)
+        listLabels = tf.map_fn(self.generate_new_labels, videos, dtype = tf.int64)
+        print("list of labels", listLabels)
         #list of tuples
-        listlosses = tf.map_fn(self.train_step_classifiers, (videos,  listLabels))
-        sumG, sumH = np.sum(np.array(listlosses), axis=0)
+        listLosses = tf.map_fn(self.train_step_classifiers, (videos,  listLabels), dtype = tf.float32)
+        sumG, sumH = tf.reduce_sum(listLosses, axis=0)
         return sumG, sumH
     def train_step_classifiers(self, videoLabelPair):
         """
@@ -73,7 +71,8 @@ class VideoModel(tf.keras.Model):
         labels = videoLabelPair[1]
         gLoss = self.g.compute_loss(video, labels[1])
         hLoss = self.h.compute_loss(video, np.array([labels[0], labels[2]]))
-        return (gLoss, hLoss)
+
+        return tf.convert_to_tensor([gLoss, hLoss],dtype=tf.float32)
     def generate_new_labels(self, video):
         """
         Assume fixed g and h. We want to find the most likely location of the action, inital state, and end state. 
@@ -91,7 +90,7 @@ class VideoModel(tf.keras.Model):
     def findMaxPair(self, hInitial, gValues, hEnd):
        
         """
-        Method to find the max pair. 
+        Method to find the max pair. Need to check this method to make sure that the label update step is correct. 
         """
         videoLen = gValues.shape[0]
         #s1 x sl x s2

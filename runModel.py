@@ -10,8 +10,8 @@ def runModel():
     """
     Run the model with data. 
     """
-    loadedData, size = loadDataNumpy()
-    #raggedTensor = tf.RaggedTensor.from_row_lengths(tf.constant(loadedData), row_lengths = frameNumbers)
+    loadedData, size, frameNumbers = loadData()
+    raggedTensor = tf.RaggedTensor.from_row_lengths(tf.constant(loadedData), row_lengths = frameNumbers)
     #newRaggedTensor = tf.repeat(raggedTensor, repeats = 5, axis=0)
     #raggedTensor = tf.ragged.constant(tensorList, ragged_rank = 1)
     #print(newRaggedTensor.shape)
@@ -23,8 +23,8 @@ def runModel():
 
     model = VideoModel(delta, k, mu, d, scale)
     model.compile(optimizer = 'adam', run_eagerly = True)
-    model.numpyFitMethod(loadedData, epochs = 10, batch_size = 2)
-    
+    #model.numpyFitMethod(raggedTensor, epochs = 10, batch_size = 2)
+    model.fit(raggedTensor, epochs=10, batch_size = 2)
 
 def loadDataNumpy():
     listArrays = []
