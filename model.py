@@ -61,9 +61,7 @@ class VideoModel(tf.keras.Model):
         return totalLoss, sumGLoss, sumHLoss
     def doMap(self, videos):
         listLabels = tf.map_fn(self.generate_new_labels, videos, dtype=tf.int32)
-        print(listLabels)
         #list of tuples
-        print(videos)
         listlosses = tf.map_fn(self.train_step_classifiers, (videos,  listLabels))
         sumG, sumH = np.sum(np.array(listlosses), axis=0)
         return sumG, sumH
@@ -184,11 +182,9 @@ class ActionClassifier(tf.keras.Model):
         #code here designed for ONE video, ie a batch size of 1, so that the length of the video is uniform, because that's needed. 
         #video is numFrames x featureVector. 
         videoLen = video.shape[-2]
-        print("label: ", label)
         #works for both batch size and no batch size. Doesnt work if make numFrames the last thing. 
         positive, negative = self.computePositiveAndNegativeExamples(videoLen, label)
-        print("positive: ", positive)
-        print("negative: ", negative)
+   
         #call the model. Want results of size videoLen x 1. 
         gPos = self(tf.gather(video, positive, axis=0))
         gNeg = self(tf.gather(video, negative, axis=0))
@@ -217,14 +213,24 @@ class ActionClassifier(tf.keras.Model):
 
         negativeExamplesPlus = positiveExampleIndices + self.k
         negativeExamplesMinus = positiveExampleIndices - self.k
+        print("neg ex plus: ", negativeExamplesPlus)
+        print("neg ex minus: ", negativeExamplesMinus)
         validNegPlus = negativeExamplesPlus<videoLen
         validNegMinus= negativeExamplesMinus >=0
+        print("valid neg plus: ", validNegPlus)
+        print("valid neg minus: ", validNegMinus)
         #the actual value where it's valid, a -1 where it isn't. 
-        examplesPlus =negativeExamplesPlus*validNegPlus - negativeExamplesPlus*np.logical_not(validNegPlus)
-        examplesMinus = negativeExamplesMinus*validNegMinus - negativeExamplesMinus*np.logical_not(validNegMinus)
+         #changed this so there's correct behavior. Get a -1 if its invalid. 
+        examplesPlus =negativeExamplesPlus*validNegPlus - 1*np.logical_not(validNegPlus)
+       
+        examplesMinus = negativeExamplesMinus*validNegMinus - 1*np.logical_not(validNegMinus)
+        print("examples plus: ", examplesPlus)
+        print("examplesMinus", examplesMinus)
         examples = np.concatenate([examplesPlus, examplesMinus], axis=None)
         #need to get rid of the -1 as well. 
+        print("examples: ", examples)
         negativeExamples = np.unique(examples)
+        print("negative examples: ", negativeExamples)
         #should be sorted in ascending order. 
         if negativeExamples[0]==-1:
             negativeExamples = negativeExamples[1:]
@@ -295,6 +301,6 @@ class StateClassifier(tf.keras.Model):
         #if label+self.delta = videoLen then end already included. 
         if label+self.delta>videoLen:
             end = videoLen
-        #don't include the end index. 
-        positiveExampleIndices = np.arange(start = start, stop = end, step = 1, dtype = int)
+        #NEED END INDEX. 
+        positiveExampleIndices = np.arange(start = start, stop = end+1, step = 1, dtype = np.int32)
         return positiveExampleIndices

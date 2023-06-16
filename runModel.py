@@ -16,7 +16,7 @@ def runModel():
     #raggedTensor = tf.ragged.constant(tensorList, ragged_rank = 1)
     #print(newRaggedTensor.shape)
     delta = 3
-    k = 3
+    k = 100
     mu = 1
     d = size
     scale = 1
