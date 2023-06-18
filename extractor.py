@@ -9,7 +9,7 @@ import scipy.ndimage
 import torch
 import timm
 
-from feature_extraction import ffmpeg_utils, transforms, tsm_model, resnext_model
+from feature_extraction import ffmpeg_utils, transforms, tsm_model
 
 def extractSimple(videoList):
     exportPath = "transformedData/"

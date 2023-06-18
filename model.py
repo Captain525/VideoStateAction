@@ -1,12 +1,15 @@
 import tensorflow as tf
 import numpy as np
 import random
+import time
 class VideoModel(tf.keras.Model):
-    def __init__(self, delta, k, mu, d, scale):
+    def __init__(self, delta, k, mu, d, scale, theta, temp):
         super().__init__(self)
         self.g = ActionClassifier(delta, k, mu, d)
         self.h = StateClassifier(delta, d)
         self.l = scale
+        self.theta = theta
+        self.temp = temp
     def numpyFitMethod(self, dataset, epochs, batch_size):
         #make dataset a LIST of numpy arrays, where each array is a video. 
         numBatches = len(dataset)//batch_size
@@ -25,7 +28,7 @@ class VideoModel(tf.keras.Model):
             print("Epoch {epoch}: Total Loss: {total} G loss: {g} H loss: {h}".format(epoch = i, total = sumEpochTotal, g = sumEpochG, h= sumEpochH))
 
 
-    def train_step(self, videos):
+    def train_step(self, videos, scores):
         """
         Called on each step of the training algorithm. 
         batch of videos: batch_size x d x numberFrames 
@@ -49,19 +52,25 @@ class VideoModel(tf.keras.Model):
                 sumGLoss+=gLoss
                 sumHLoss+=hLoss
             """
-            sumGLoss, sumHLoss = self.doMap(videos)
+            #need to also pass in the relevance scores. 
+            sumGLoss, sumHLoss = self.doMap(videos, scores)
             totalLoss = sumHLoss + self.l*sumGLoss
         #gradient tape can only do one at a time. 
         print("trainable weights: ", len(self.trainable_weights))
         grad = tape.gradient(totalLoss, self.trainable_weights)
         self.optimizer.apply_gradients(zip(grad, self.trainable_weights))
         return {"totalLoss": totalLoss, "sumGLoss":sumGLoss, "sumHLoss":sumHLoss}
-    def doMap(self, videos):
+    def doMap(self, videos, scores):
         listLabels = tf.map_fn(self.generate_new_labels, videos, dtype = tf.int64)
         print("list of labels", listLabels)
         #list of tuples
         listLosses = tf.map_fn(self.train_step_classifiers, (videos,  listLabels), dtype = tf.float32)
-        sumG, sumH = tf.reduce_sum(listLosses, axis=0)
+        #size batchSize. One per video. 
+        weightTensor = tf.math.sigmoid((scores - self.theta)/self.temp)
+        #listLosses is batchSize x 2. 
+        #does it broadcast? 
+        listLossesWeighted = listLosses * tf.expand_dims(weightTensor, axis=1)
+        sumG, sumH = tf.reduce_sum(listLossesWeighted, axis=0)
         return sumG, sumH
     def train_step_classifiers(self, videoLabelPair):
         """
@@ -92,6 +101,8 @@ class VideoModel(tf.keras.Model):
         """
         Method to find the max pair. Need to check this method to make sure that the label update step is correct. 
         """
+        #Time this method. 
+        startTime = time.time()
         videoLen = gValues.shape[0]
         #s1 x sl x s2
         validTuples = np.ones(shape = (videoLen, videoLen, videoLen), dtype = bool)
@@ -130,6 +141,9 @@ class VideoModel(tf.keras.Model):
         #changed shape to dims when going to tf from np
        
         finalIndices =tf.unravel_index(tf.argmax(tf.reshape(weightedArray, shape = (-1, )), axis=None), dims = (videoLen, videoLen, videoLen))
+        endTime = time.time()
+        print("time to calculate new labels: ", endTime - startTime)
+
         return finalIndices
     def testCalcMax(self):
         gValues = np.array([.4, .2, .1, .5, .6])
