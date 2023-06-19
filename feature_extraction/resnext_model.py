@@ -1,6 +1,5 @@
 import os
 import numpy as np
-import mxnet as mx
 import tensorflow as tf
 from collections import namedtuple
 def get_resnext_fc(network_path, network_epoch, input_height=224, input_width=224, batch_size=16):

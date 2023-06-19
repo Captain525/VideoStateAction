@@ -3,8 +3,9 @@ from __future__ import unicode_literals
 import yt_dlp
 import csv
 import os
-from extractor import callExtractor, extractSimple
+from extractor import  extractSimple, justExtractAndSave, callTransformAndFeatureExtract
 import pandas as pd
+from saveLoad import loadNamesCategory, loadCategoryData, loadCenteringParams
 
 def loadVideos(category):
     csvLink = os.getcwd() + "/ChangeIt/ChangeIt-main/videos/" + category + ".csv"
@@ -25,7 +26,7 @@ def loadVideos(category):
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([link])
-        except:
+        except :
             print("Exception on video num: ", count)
             continue
         #do operations to it now. 
@@ -39,14 +40,10 @@ def loadVideos(category):
            f.writelines([str(relevance) + "\n" for relevance in listValues])
     extractSimple(listLinks)
     return count
-def loadCenteringParams():
-    link = os.getcwd() + "/ChangeIt/ChangeIt-main/categories.csv"
-    categoryCSV = pd.read_csv(link)
-    #ordered in alphabetical categories.  
-    centeringParams = categoryCSV.loc[:, "CENTERING_PARAM"]
-    catList = categoryCSV.loc[:, "DIR_NAME"]
-    return centeringParams, catList
 def loadCategories():
+    """
+    load all the category data, then save it, as well as load the videos. This is the one you call ifyou want to save EVERYTHING. 
+    """
     centeringParams, listCategories = loadCenteringParams()
     saveLink = os.getcwd() + "/videoData"
     listCounts = []
@@ -58,24 +55,23 @@ def loadCategories():
         f.writelines([category + "\n" for category in listCategories])
         f.writelines([str(center) + "\n" for center in centeringParams])
     return 
-def transformVideo(videoLink):
-    extractSimple([videoLink])
+def extractVideosCategory(category):
+    """
+    Go from saved videos to the transformed with feature extraction. One step of the above, if want to redo the extracting features. 
+    """
+    link = os.getcwd() + "/DownloadedVideos/"
+    fileNames, relevanceScores = loadNamesCategory(category)
+    listVideoLinks = [link + name + ".mp4" for name in fileNames]
+    extractSimple(listVideoLinks)
+    return 
+def extractFramesCategory(category):
+    link = os.getcwd() + "/DownloadedVideos/"
+    fileNames, relevanceScores = loadNamesCategory(category)
+    listVideoLinks = [link + name + ".mp4" for name in fileNames]
+    justExtractAndSave(listVideoLinks)
+def testCallTransformAndFeatureExtract(category):
+    callTransformAndFeatureExtract(category)
 def testLoadCategory():
     category = "Apple"
     count = loadVideos(category)
-def downloadAllVideos():
-    loadCategories()
-def tryIt():
-    
-    link = 'https://www.youtube.com/watch?v=DdSoQsEKXkk'
-    category = "Apple"
-    count = 0
-    ydl_opts={'format':'best', 'outtmpl':'DownloadedVideos/{cat}{num}.mp4'.format(cat = category, num = count)}
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ydl.download([link])
-    
-    location = os.getcwd() + "\DownloadedVideos\Apple0.mp4"
-    print("location:", location)
-    transformVideo(location)
-downloadAllVideos()
-testLoadCategory()
+testCallTransformAndFeatureExtract("Apple")
