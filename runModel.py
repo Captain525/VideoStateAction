@@ -27,7 +27,7 @@ def runModel():
     model = VideoModel(delta, k, mu, d, scale, theta = thetaValues[categoryIndex], temp=temp)
     model.compile(optimizer = 'adam', run_eagerly = True)
     #model.numpyFitMethod(raggedTensor, epochs = 10, batch_size = 2)
-    model.fit(raggedTensor, relevanceTensor, epochs=10, batch_size = 2)
+    model.fit(raggedTensor, relevanceTensor, epochs=10, batch_size = 10)
 
 def loadDataFromCategory(category):
     """
@@ -36,14 +36,14 @@ def loadDataFromCategory(category):
     #load the file names. 
     dataPath = os.getcwd() + "/transformedData/"
     
-    fileNames, relevanceScores = loadNamesCategory()
+    fileNames, relevanceScores = loadNamesCategory(category)
     dataList = []
     relevanceScoreList = []
     frameNumbers = []
     for i in range(len(fileNames)):
         file = fileNames[i]
         #numTransforms x numFrames x dataSize
-        loadedArray = np.load(dataPath + file)
+        loadedArray = np.load(dataPath + file + ".npy")
         listSplit = np.vsplit(loadedArray, loadedArray.shape[0])
         relevanceScoreMiniList = [relevanceScores[i] for j in range(len(listSplit))]
         miniFrameNumbers = [loadedArray.shape[1] for j in range(len(listSplit))]

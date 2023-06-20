@@ -48,5 +48,5 @@ def get_transform(img_size, identity=False):
             imgs = [t(img) for img in imgs]
         if end_size is not None:
             imgs = [img.resize(end_size) for img in imgs]
-        return np.stack([np.array(img) for img in imgs], 0)
+        return np.stack([np.array(img, dtype=np.float32) for img in imgs], 0)
     return fc

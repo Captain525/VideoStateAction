@@ -46,13 +46,17 @@ def loadExtract(nameList):
     print("Load time for extract was: ", loadTime)
     return listFrames
 
-def massTransform(listFrames):
-    num_transforms = 10
+def massTransform(listFrames, num_transforms):
+    #transforming 2266 frames(10 videos) in about 5-10 seconds. 
     numFramesEach = np.array([video.shape[0] for video in listFrames])
+    
     cumulativeSums = np.cumsum(numFramesEach)
+    print("before stacked frames")
     stackedFrames = np.vstack(listFrames)
+    print("stacked frames size: ", stackedFrames.shape)
     listAllPoints = []
     for i in range(num_transforms):
+        print("on transform: ", i)
         transform = transforms.get_transform(stackedFrames.shape[1:3][::-1], identity= (i == 0))
         startTransform = time.time()
         #can treat the list of videos as one big video. 
@@ -63,32 +67,70 @@ def massTransform(listFrames):
         print("transformedShape: ", transformedInputs.shape)
         assert(transformedInputs.shape==(stackedFrames.shape[0], 224, 224, 3))
         listAllPoints.append(transformedInputs)
-    stackedTransforms = np.stack(listAllPoints, axis=0)
-    listTransforms = np.split(stackedTransforms, cumulativeSums, axis=1)
-    for array in listTransforms:
-        print("array shape: ", array.shape)
-    return listTransforms
-def featureExtractFrames(transformedFeatures):
-    exportPath = "transformedData/"
+    print("time for stacking")
+    stackedTransforms = np.vstack(listAllPoints)
+    #last one is just a nothing array. 
+    #listTransforms = np.split(stackedTransforms, cumulativeSums, axis=1)[:-1]
+    #listOneArray = [array.reshape((-1, 224, 224, 3)) for array in listTransforms]
+    return stackedTransforms, numFramesEach
+def featureExtractFrames(transformedFeatures, numTransforms, numFramesEach):
+    #time: 45 seconds for 10 videos. Num frames without transforms 2549, *5 for transforms. 12745 ops. 283 frames per second. 
     model = get_ResNet()
-    numFramesEach = [video.shape[0] for video in transformedFeatures]
-    stackedFeatures = np.vstack(transformedFeatures)
+    #numFramesEach = [video.shape[0] for video in transformedFeatures]
+    #stackedFeatures = np.vstack(transformedFeatures)
+    print("extracting frames")
     startModel = time.time()
-    modelOutputs = model(stackedFeatures)
+    modelOutputs = model(transformedFeatures)
     endModel = time.time()
     print("Model time elapsed: ", endModel - startModel)
-    videoFeatures = np.split(modelOutputs, numFramesEach, axis=0)
+    cumulativeSums = np.cumsum(numFramesEach)
+    amount = cumulativeSums[-1]
+    print("amount", amount)
+    values = amount*np.arange(0, numTransforms)
+    print("output size: ", modelOutputs.shape)
+    print("values: ", values)
+    videoFeatures = np.split(modelOutputs, values, axis=0)
+    for feature in videoFeatures:
+        print(feature.shape)
+    stacked = np.vstack(videoFeatures)
+    videoFeaturesReshaped = np.split(stacked, cumulativeSums, axis=1)[:-1]
+    #videoFeatures = np.split(modelOutputs, numFramesEach, axis=0)[:-1]
+    #videoFeaturesReshaped = [array.reshape((numTransforms, -1, modelOutputs.shape[-1]))  for array in videoFeatures]
     #note that videoFeatures are shaped by the transformed ones. 
-    return videoFeatures
+    return videoFeaturesReshaped
+def saveFeatures(videoFeatures, names):
+    """
+    Can we add a way to stop the pipeline earlier if the things we're trying to get already exist? 
+    Bc they're in batches it's more difficult, but there should be a way. 
+    """
+    exportPath = "transformedData/"
+    for i in range(0, len(videoFeatures)):
+        name = names[i]
+        video = videoFeatures[i]
+        if os.path.exists(exportPath + name + ".npy"):
+            print(name, " already exists")
+            continue
+        np.save(exportPath + name, video)
+    return 
 def callTransformAndFeatureExtract(category):
     """
     Assumes frames are saved already.
     Need names for hte category we desire
     """
     names, _ = loadNamesCategory(category)
-    listFrames = loadExtract(names)
-    transformedFeatures = massTransform(listFrames)
-    
+    batchSize = 10
+    #need at least 1 for identity. 
+    numTransforms = 5
+    start = 620
+    iterator = iterData(names, batchSize=batchSize, start=start)
+    for nameList, batchNumpy in iterator:
+        startBatch = time.time()
+        transformedFeatures,numFramesEach= massTransform(batchNumpy, numTransforms)
+        featureList = featureExtractFrames(transformedFeatures, numTransforms, numFramesEach)
+        saveFeatures(featureList, nameList)
+        endBatch = time.time()
+        print("batchTime: ", endBatch-startBatch)
+        
 
 def extractFramesFromVideo(videoLink, fps, size, crop):
     """
@@ -154,3 +196,21 @@ def checkSaving(videoFile, exportPath, numpy):
         print(f"File {out_file} exists, skipping.")
         return False, out_file
     return True, out_file
+
+class iterData:
+    def __init__(self, names, batchSize, start):
+        self.links = names
+        self.batchSize = batchSize
+        self.numBatches = len(self.links)//self.batchSize
+        self.count = start//self.batchSize
+    def __iter__(self):
+        return self
+    
+    def __next__(self):
+        if(self.count>self.numBatches):
+            raise StopIteration
+        print("in next")
+        names = self.links[self.batchSize*self.count:self.batchSize*(self.count+1)]
+        arrays = loadExtract(names)
+        self.count = self.count + 1
+        return names, arrays

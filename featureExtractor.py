@@ -15,12 +15,10 @@ def get_ResNet():
         numBatches = numFrames//batchSize+1
         listFrames = []
         for i in range(numBatches):
+            #last still works without indexing errors. 
             batchImage = inputImages[i*batchSize:(i+1)*batchSize, :, : , :]
             visionOutput = model(batchImage)
             listFrames.append(visionOutput)
-        #last batch. 
-        #lets see if the +1 allows this automatically. 
-        #listFrames.append(model(inputImages[numBatches*batchSize:, :, :, :]))
         visionArray = np.vstack(listFrames)
         print("vision array shape: ", visionArray.shape)
         reshapedFeatures = np.reshape(visionArray, newshape = (numFrames, -1))
