@@ -86,14 +86,18 @@ def featureExtractFrames(transformedFeatures, numTransforms, numFramesEach):
     cumulativeSums = np.cumsum(numFramesEach)
     amount = cumulativeSums[-1]
     print("amount", amount)
-    values = amount*np.arange(0, numTransforms)
+    #dont want 0
+    values = amount*np.arange(0, numTransforms)[1:]
     print("output size: ", modelOutputs.shape)
     print("values: ", values)
     videoFeatures = np.split(modelOutputs, values, axis=0)
     for feature in videoFeatures:
         print(feature.shape)
-    stacked = np.vstack(videoFeatures)
+    stacked = np.stack(videoFeatures,axis=0)
+    print("stacked shape: ", stacked.shape)
     videoFeaturesReshaped = np.split(stacked, cumulativeSums, axis=1)[:-1]
+    for feature in videoFeaturesReshaped:
+        print(feature.shape)
     #videoFeatures = np.split(modelOutputs, numFramesEach, axis=0)[:-1]
     #videoFeaturesReshaped = [array.reshape((numTransforms, -1, modelOutputs.shape[-1]))  for array in videoFeatures]
     #note that videoFeatures are shaped by the transformed ones. 
@@ -107,6 +111,8 @@ def saveFeatures(videoFeatures, names):
     for i in range(0, len(videoFeatures)):
         name = names[i]
         video = videoFeatures[i]
+        assert(video.shape[-1] == 2048)
+        assert(video.shape[-2]!=0)
         if os.path.exists(exportPath + name + ".npy"):
             print(name, " already exists")
             continue
@@ -121,12 +127,13 @@ def callTransformAndFeatureExtract(category):
     batchSize = 10
     #need at least 1 for identity. 
     numTransforms = 5
-    start = 620
+    start = 0
     iterator = iterData(names, batchSize=batchSize, start=start)
     for nameList, batchNumpy in iterator:
         startBatch = time.time()
         transformedFeatures,numFramesEach= massTransform(batchNumpy, numTransforms)
         featureList = featureExtractFrames(transformedFeatures, numTransforms, numFramesEach)
+        
         saveFeatures(featureList, nameList)
         endBatch = time.time()
         print("batchTime: ", endBatch-startBatch)

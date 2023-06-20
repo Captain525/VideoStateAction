@@ -2,6 +2,7 @@ import tensorflow as tf
 import numpy as np
 import random
 import time
+import cupy as cp
 class VideoModel(tf.keras.Model):
     def __init__(self, delta, k, mu, d, scale, theta, temp):
         super().__init__(self)
@@ -28,7 +29,7 @@ class VideoModel(tf.keras.Model):
             print("Epoch {epoch}: Total Loss: {total} G loss: {g} H loss: {h}".format(epoch = i, total = sumEpochTotal, g = sumEpochG, h= sumEpochH))
 
 
-    def train_step(self, videos, scores):
+    def train_step(self, dataTuple):
         """
         Called on each step of the training algorithm. 
         batch of videos: batch_size x d x numberFrames 
@@ -39,7 +40,11 @@ class VideoModel(tf.keras.Model):
         """
         #assume we have a list of videos. 
         #step 1: find labels for each category. 
-        
+        videos = dataTuple[0]
+        scores = dataTuple[1]
+        #print(videos.shape)
+
+        #print(len(scores))
 
         with tf.GradientTape() as tape:
             sumGLoss = 0
@@ -56,13 +61,13 @@ class VideoModel(tf.keras.Model):
             sumGLoss, sumHLoss = self.doMap(videos, scores)
             totalLoss = sumHLoss + self.l*sumGLoss
         #gradient tape can only do one at a time. 
-        print("trainable weights: ", len(self.trainable_weights))
+        #print("trainable weights: ", len(self.trainable_weights))
         grad = tape.gradient(totalLoss, self.trainable_weights)
         self.optimizer.apply_gradients(zip(grad, self.trainable_weights))
         return {"totalLoss": totalLoss, "sumGLoss":sumGLoss, "sumHLoss":sumHLoss}
     def doMap(self, videos, scores):
         listLabels = tf.map_fn(self.generate_new_labels, videos, dtype = tf.int64)
-        print("list of labels", listLabels)
+        #print("list of labels", listLabels)
         #list of tuples
         listLosses = tf.map_fn(self.train_step_classifiers, (videos,  listLabels), dtype = tf.float32)
         #size batchSize. One per video. 
@@ -106,7 +111,9 @@ class VideoModel(tf.keras.Model):
         videoLen = gValues.shape[0]
         #s1 x sl x s2
         validTuples = np.ones(shape = (videoLen, videoLen, videoLen), dtype = bool)
+        print("length of video", videoLen)
         #last 2 indices 0. 
+        
         validTuples[videoLen-2:, :, :] = 0
         #the action can't be the first or last. 
         validTuples[:, 0, :] = 0
@@ -131,16 +138,19 @@ class VideoModel(tf.keras.Model):
         assert(validTuples[2, 1, 3] == 0)
         assert(validTuples[3, 1, 2] == 0)
         #not sure this gets the values we want. 
+        del triangleXIndices
+        del triangleYIndices
         productArray = tf.tensordot(hInitial, gValues, axes=0)
         productTensor = tf.tensordot(productArray, hEnd, axes=0)
-  
+        del productArray
 
         #assert(productTensor[0, 1, 2] ==hInitial[0]*gValues[1]*hEnd[2])
         #if it works, can multiply by the triangular matrix to get zeros. 
-        weightedArray =  productTensor*validTuples
+        #productTensor =  tf.math.multiply(productTensor, validTuples)
         #changed shape to dims when going to tf from np
-       
-        finalIndices =tf.unravel_index(tf.argmax(tf.reshape(weightedArray, shape = (-1, )), axis=None), dims = (videoLen, videoLen, videoLen))
+        del validTuples
+        finalIndices =tf.unravel_index(tf.argmax(tf.reshape(productTensor, shape = (-1, )), axis=None), dims = (videoLen, videoLen, videoLen))
+        del productTensor
         endTime = time.time()
         print("time to calculate new labels: ", endTime - startTime)
 
@@ -226,24 +236,24 @@ class ActionClassifier(tf.keras.Model):
 
         negativeExamplesPlus = positiveExampleIndices + self.k
         negativeExamplesMinus = positiveExampleIndices - self.k
-        print("neg ex plus: ", negativeExamplesPlus)
-        print("neg ex minus: ", negativeExamplesMinus)
+        #print("neg ex plus: ", negativeExamplesPlus)
+        #print("neg ex minus: ", negativeExamplesMinus)
         validNegPlus = negativeExamplesPlus<videoLen
         validNegMinus= negativeExamplesMinus >=0
-        print("valid neg plus: ", validNegPlus)
-        print("valid neg minus: ", validNegMinus)
+        #print("valid neg plus: ", validNegPlus)
+        #print("valid neg minus: ", validNegMinus)
         #the actual value where it's valid, a -1 where it isn't. 
          #changed this so there's correct behavior. Get a -1 if its invalid. 
         examplesPlus =negativeExamplesPlus*validNegPlus - 1*np.logical_not(validNegPlus)
        
         examplesMinus = negativeExamplesMinus*validNegMinus - 1*np.logical_not(validNegMinus)
-        print("examples plus: ", examplesPlus)
-        print("examplesMinus", examplesMinus)
+        #print("examples plus: ", examplesPlus)
+        #print("examplesMinus", examplesMinus)
         examples = np.concatenate([examplesPlus, examplesMinus], axis=None)
         #need to get rid of the -1 as well. 
-        print("examples: ", examples)
+        #print("examples: ", examples)
         negativeExamples = np.unique(examples)
-        print("negative examples: ", negativeExamples)
+        #print("negative examples: ", negativeExamples)
         #should be sorted in ascending order. 
         if negativeExamples[0]==-1:
             negativeExamples = negativeExamples[1:]
