@@ -3,6 +3,7 @@ import numpy as np
 import random
 import time
 import cupy as cp
+
 class VideoModel(tf.keras.Model):
     def __init__(self, delta, k, mu, d, scale, theta, temp):
         super().__init__(self)
@@ -41,7 +42,10 @@ class VideoModel(tf.keras.Model):
         #assume we have a list of videos. 
         #step 1: find labels for each category. 
         videos = dataTuple[0]
-        scores = dataTuple[1]
+        scoreLensTensor = dataTuple[1]
+        print(scoreLensTensor.shape)
+        scores = scoreLensTensor[:, 0]
+        videoLens = tf.cast(scoreLensTensor[:, 1], tf.int32)
         #print(videos.shape)
 
         #print(len(scores))
@@ -58,58 +62,66 @@ class VideoModel(tf.keras.Model):
                 sumHLoss+=hLoss
             """
             #need to also pass in the relevance scores. 
-            sumGLoss, sumHLoss = self.doMap(videos, scores)
+            sumGLoss, sumHLoss = self.doMap(videos, scores, videoLens)
             totalLoss = sumHLoss + self.l*sumGLoss
         #gradient tape can only do one at a time. 
         #print("trainable weights: ", len(self.trainable_weights))
         grad = tape.gradient(totalLoss, self.trainable_weights)
         self.optimizer.apply_gradients(zip(grad, self.trainable_weights))
         return {"totalLoss": totalLoss, "sumGLoss":sumGLoss, "sumHLoss":sumHLoss}
-    def doMap(self, videos, scores):
-        listLabels = tf.map_fn(self.generate_new_labels, videos, dtype = tf.int64)
+    def doMap(self, videos, scores, videoLens):
+        listLabels = tf.map_fn(self.generate_new_labels, (videos, videoLens), dtype = tf.int32)
         #print("list of labels", listLabels)
         #list of tuples
-        listLosses = tf.map_fn(self.train_step_classifiers, (videos,  listLabels), dtype = tf.float32)
+        listLosses = tf.map_fn(self.train_step_classifiers, (videos,  listLabels, videoLens), dtype = tf.float32)
         #size batchSize. One per video. 
         weightTensor = tf.math.sigmoid((scores - self.theta)/self.temp)
         #listLosses is batchSize x 2. 
         #does it broadcast? 
         listLossesWeighted = listLosses * tf.expand_dims(weightTensor, axis=1)
-        sumG, sumH = tf.reduce_sum(listLossesWeighted, axis=0)
-        return sumG, sumH
+        print(listLossesWeighted.shape)
+        g = listLossesWeighted[:, 0]
+        h = listLossesWeighted[:, 1]
+        #sumG, sumH = tf.reduce_sum(listLossesWeighted, axis=0)
+        return g, h
     def train_step_classifiers(self, videoLabelPair):
         """
         treat labels as fixed.
         """
         video = videoLabelPair[0]
         labels = videoLabelPair[1]
-        gLoss = self.g.compute_loss(video, labels[1])
-        hLoss = self.h.compute_loss(video, np.array([labels[0], labels[2]]))
+        videoLen = videoLabelPair[2]
+        print("videoLen: ", videoLen)
+        gLoss = self.g.compute_loss(video, labels[1], videoLen)
+        hLoss = self.h.compute_loss(video, tf.stack([labels[0], labels[2]], axis=0), videoLen)
 
         return tf.convert_to_tensor([gLoss, hLoss],dtype=tf.float32)
-    def generate_new_labels(self, video):
+    def generate_new_labels(self, videoLenPair):
         """
         Assume fixed g and h. We want to find the most likely location of the action, inital state, and end state. 
         THe video contains action with high probability. 
         l(v) = argmax(l in Dv) h1(xls1)*g(xla)*h2(xls2)
         """
+        video = videoLenPair[0]
+        videoLen= videoLenPair[1]
         gValues = self.g(video)
         hValues = self.h(video)
         hInitial = hValues[:, 0]
         hEnd = hValues[:, 1]
         #this method finds the max pair according to the causal ordering constraint. 
-        labels = self.findMaxPair(hInitial, gValues, hEnd)
+        labels = self.findMaxPair(hInitial, gValues, hEnd, videoLen)
         return labels
    
-    def findMaxPair(self, hInitial, gValues, hEnd):
+    def findMaxPair(self, hInitial, gValues, hEnd, videoLen):
        
         """
         Method to find the max pair. Need to check this method to make sure that the label update step is correct. 
         """
         #Time this method. 
         startTime = time.time()
-        videoLen = gValues.shape[0]
+        #videoLen = gValues.shape[0]
         #s1 x sl x s2
+        """
         validTuples = np.ones(shape = (videoLen, videoLen, videoLen), dtype = bool)
         print("length of video", videoLen)
         #last 2 indices 0. 
@@ -140,6 +152,7 @@ class VideoModel(tf.keras.Model):
         #not sure this gets the values we want. 
         del triangleXIndices
         del triangleYIndices
+        """
         productArray = tf.tensordot(hInitial, gValues, axes=0)
         productTensor = tf.tensordot(productArray, hEnd, axes=0)
         del productArray
@@ -148,13 +161,19 @@ class VideoModel(tf.keras.Model):
         #if it works, can multiply by the triangular matrix to get zeros. 
         #productTensor =  tf.math.multiply(productTensor, validTuples)
         #changed shape to dims when going to tf from np
-        del validTuples
-        finalIndices =tf.unravel_index(tf.argmax(tf.reshape(productTensor, shape = (-1, )), axis=None), dims = (videoLen, videoLen, videoLen))
+        # del validTuples
+        finalIndices =tf.cast(tf.unravel_index(tf.argmax(tf.reshape(productTensor, shape = (-1, )), axis=None), dims = (videoLen, videoLen, videoLen)), tf.int32)
+        #finalIndices = tf.unravel_index(tf.argmax(tf.reshape(productTensor, shape=(-1, )), axis=None), dims = productTensor.shape)
+        print(finalIndices)
+        print(finalIndices.shape)
+        #assert(finalIndices.shape == (3,))
         del productTensor
         endTime = time.time()
         print("time to calculate new labels: ", endTime - startTime)
 
         return finalIndices
+    #def constrainedArgmax():
+
     def testCalcMax(self):
         gValues = np.array([.4, .2, .1, .5, .6])
         hInitial = np.array([.2, .6, .7, .3, .1])
@@ -191,7 +210,7 @@ class ActionClassifier(tf.keras.Model):
         assert(output.shape == (video.shape[0],))
         return output
 
-    def compute_loss(self, video, label):
+    def compute_loss(self, video, label, videoLen):
         """
         THe loss function for the action classifier is a cross entropy loss, but with a twist. 
         -mu sum(over APv) log(g(xt)) -sum(over ANv) log(1-g(xt))
@@ -204,8 +223,9 @@ class ActionClassifier(tf.keras.Model):
 
         #code here designed for ONE video, ie a batch size of 1, so that the length of the video is uniform, because that's needed. 
         #video is numFrames x featureVector. 
-        videoLen = video.shape[-2]
-        #works for both batch size and no batch size. Doesnt work if make numFrames the last thing. 
+        #videoLen = video.shape[-2]
+        #works for both batch size and no batch size. Doesnt work if make numFrames the last thing.
+         
         positive, negative = self.computePositiveAndNegativeExamples(videoLen, label)
    
         #call the model. Want results of size videoLen x 1. 
@@ -232,7 +252,7 @@ class ActionClassifier(tf.keras.Model):
             end = videoLen
         #THIS DOESN'T NEED TENSORFLOW
         #added end + 1 because we DO need the end index here. 
-        positiveExampleIndices =np.arange(start = start, stop = end+1, step = 1, dtype = np.int32)
+        positiveExampleIndices = tf.range(start = start, limit = end+1, delta = 1, dtype = tf.int32)
 
         negativeExamplesPlus = positiveExampleIndices + self.k
         negativeExamplesMinus = positiveExampleIndices - self.k
@@ -244,15 +264,16 @@ class ActionClassifier(tf.keras.Model):
         #print("valid neg minus: ", validNegMinus)
         #the actual value where it's valid, a -1 where it isn't. 
          #changed this so there's correct behavior. Get a -1 if its invalid. 
-        examplesPlus =negativeExamplesPlus*validNegPlus - 1*np.logical_not(validNegPlus)
+        examplesPlus =negativeExamplesPlus*tf.cast(validNegPlus, tf.int32) - tf.cast(tf.logical_not(validNegPlus), tf.int32)
        
-        examplesMinus = negativeExamplesMinus*validNegMinus - 1*np.logical_not(validNegMinus)
+        examplesMinus = negativeExamplesMinus*tf.cast(validNegMinus, tf.int32) -tf.cast(tf.logical_not(validNegMinus), tf.int32)
         #print("examples plus: ", examplesPlus)
         #print("examplesMinus", examplesMinus)
-        examples = np.concatenate([examplesPlus, examplesMinus], axis=None)
+        print(examplesPlus.shape)
+        examples = tf.concat([examplesPlus, examplesMinus], axis=0)
         #need to get rid of the -1 as well. 
         #print("examples: ", examples)
-        negativeExamples = np.unique(examples)
+        negativeExamples = tf.unique(examples)[0]
         #print("negative examples: ", negativeExamples)
         #should be sorted in ascending order. 
         if negativeExamples[0]==-1:
@@ -280,7 +301,7 @@ class StateClassifier(tf.keras.Model):
         output = self.dense2(intermediate)
         assert(output.shape == (video.shape[0], 2))
         return output
-    def compute_loss(self, video, labels):
+    def compute_loss(self, video, labels, videoLen):
         """
         loss for h. Cross entropy with a twist. 
         -sum(over S1v) logh1(xt) - sum(over S2v) logh2(vt)
@@ -295,7 +316,8 @@ class StateClassifier(tf.keras.Model):
         maybe make video batch_size x numFeatures x length? Are we going to pad? 
         video is batch_size x length x numFeatures
         """
-        videoLen = video.shape[-2]
+        print(labels.shape)
+        #videoLen = video.shape[-2]
         initLabelPos, endLabelPos = self.samplePosExamples(videoLen, labels)
         hPos = self(tf.gather(video, initLabelPos, axis=0))
         hNeg = self(tf.gather(video, endLabelPos, axis=0))
@@ -325,5 +347,5 @@ class StateClassifier(tf.keras.Model):
         if label+self.delta>videoLen:
             end = videoLen
         #NEED END INDEX. 
-        positiveExampleIndices = np.arange(start = start, stop = end+1, step = 1, dtype = np.int32)
+        positiveExampleIndices = tf.range(start = start, limit = end+1, delta = 1, dtype = tf.int32)
         return positiveExampleIndices

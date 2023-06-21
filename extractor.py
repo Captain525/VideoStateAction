@@ -124,10 +124,10 @@ def callTransformAndFeatureExtract(category):
     Need names for hte category we desire
     """
     names, _ = loadNamesCategory(category)
-    batchSize = 10
+    batchSize = 20
     #need at least 1 for identity. 
     numTransforms = 5
-    start = 0
+    start = 100
     iterator = iterData(names, batchSize=batchSize, start=start)
     for nameList, batchNumpy in iterator:
         startBatch = time.time()

@@ -9,6 +9,7 @@ from saveLoad import loadCategoryData, loadNamesCategory
 def runModel():
     """
     Run the model with data. 
+    Hyperparameters obtained from the paper
     """
     categories, thetaValues = loadCategoryData() 
     categoryIndex = 0
@@ -20,18 +21,21 @@ def runModel():
     raggedTensor = tf.RaggedTensor.from_row_lengths(data, row_lengths = frameNumbers)
     print(raggedTensor.shape)
     relevanceTensor = tf.constant(relevanceList, tf.float32)
-    delta = 3
-    k = 100
-    mu = 1
+    #delta=2 means 5 examples. 
+    delta = 2
+    k = 60
+    mu = 10
     d = raggedTensor.shape[-1]
-    scale = 1
-    temp = 1
+    scale = .2
+    temp = .001
     print("got before model")
     model = VideoModel(delta, k, mu, d, scale, theta = thetaValues[categoryIndex], temp=temp)
-    model.compile(optimizer = 'adam', run_eagerly = True)
+    #add run_eagerly=True
+    model.compile(optimizer = 'adam')
+    #model.compile(optimizer= 'adam', run_eagerly=True)
     #model.numpyFitMethod(raggedTensor, epochs = 10, batch_size = 2)
     print("ready to fit")
-    model.fit(raggedTensor, relevanceTensor, epochs=10, batch_size = 5)
+    model.fit(raggedTensor, tf.stack([relevanceTensor, tf.constant(frameNumbers, dtype=tf.float32)], axis=1),  epochs=10, batch_size =10)
 
 def loadDataFromCategory(category):
     """

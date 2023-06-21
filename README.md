@@ -17,3 +17,5 @@ Get video file from the dataset.
 Want to extract "features" from the dataset. That is, get a list of T feature vectors for each video, where T is the number of seconds in the video. Each vector represents original resolution of video features into 1 fps. 
 
 First, we go from video -> reduced fps, resized to some common size we desire. This is with the ffmpeg_utils file. 
+
+Then, we want to apply some pretrained feature extractor on it. The paper uses 2D ResNeXT pre-trained and 3D TSM resNet50 pretrained models, then concatenates them together. 

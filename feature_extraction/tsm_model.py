@@ -3,6 +3,7 @@ import tensorflow as tf
 import tensorflow_hub as hub
 
 
+
 def get_model():
     #T is the number of steps or whatever. 
     model = tf.keras.applications.resnet50.ResNet50(include_top = False, weights='imagenet', input_shape = (224,224, 3),pooling='avg')
