@@ -1,0 +1,6 @@
+NEED: Potential next steps for the project. 
+Ideas:
+Leverage sound, class agnostic learning, pointwise tracking
+Need to log hours from june at some point - tried doing that, uncertain. 
+
+Reading the 3 papers for pointwise tracking, where we cut up the object into parts. 

@@ -31,11 +31,10 @@ def runModel():
     print("got before model")
     model = VideoModel(delta, k, mu, d, scale, theta = thetaValues[categoryIndex], temp=temp)
     #add run_eagerly=True
-    model.compile(optimizer = 'adam')
-    #model.compile(optimizer= 'adam', run_eagerly=True)
-    #model.numpyFitMethod(raggedTensor, epochs = 10, batch_size = 2)
-    print("ready to fit")
-    model.fit(raggedTensor, tf.stack([relevanceTensor, tf.constant(frameNumbers, dtype=tf.float32)], axis=1),  epochs=10, batch_size =10)
+    #model.compile(optimizer = 'adam')
+    optimizer = tf.keras.optimizers.SGD(learning_rate = .001, momentum = .9)
+    model.compile(optimizer = optimizer, run_eagerly = True)
+    model.fit(raggedTensor, tf.stack([relevanceTensor, tf.constant(frameNumbers, dtype=tf.float32)], axis=1), epochs=10, batch_size =10)
 
 def loadDataFromCategory(category):
     """
@@ -49,16 +48,27 @@ def loadDataFromCategory(category):
     relevanceScoreList = []
     frameNumbers = []
     listDefective = []
-    for i in range(100):
+    for i in range(len(fileNames)):
         file = fileNames[i]
         #numTransforms x numFrames x dataSize
         print("Link: ", dataPath + file +".npy")
-        loadedArray = np.load(dataPath + file + ".npy")
-        print("loaded shape: ", loadedArray.shape)
+        try:
+            loadedArray = np.load(dataPath + file + ".npy")
+        except:
+            print("skipping bc doesn't exist")
+            continue
+
+        maxValue = np.max(loadedArray)
+        minValue = np.min(loadedArray)
+        normalizedArray = (loadedArray - minValue)/(maxValue - minValue)
+        print("loaded shape: ", normalizedArray.shape)
         if(loadedArray.shape[1] == 0):
             listDefective.append(i)
             continue
-        listSplit = np.vsplit(loadedArray, loadedArray.shape[0])
+        if(loadedArray.shape[1]>=500):
+            listDefective.append(i)
+            continue
+        listSplit = np.vsplit(normalizedArray, loadedArray.shape[0])
         print(listSplit[0].shape)
         relevanceScoreMiniList = [relevanceScores[i] for j in range(len(listSplit))]
         miniFrameNumbers = [loadedArray.shape[1] for j in range(len(listSplit))]

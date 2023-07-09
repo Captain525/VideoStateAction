@@ -1,0 +1,12 @@
+Apple0, 150, 158
+Apple1, 67, 74
+Apple2, 65, 72
+Apple3, 30, 40
+Milk0, 344, 355
+Milk1, 6, 19
+Milk2, 0, 16
+Milk3, 42, 49
+Tree0, 0, 191
+Tree1, 154, 164
+Tree2, 381, 404
+Tree3, 477, 487

@@ -43,7 +43,7 @@ class VideoModel(tf.keras.Model):
         #step 1: find labels for each category. 
         videos = dataTuple[0]
         scoreLensTensor = dataTuple[1]
-        print(scoreLensTensor.shape)
+        
         scores = scoreLensTensor[:, 0]
         videoLens = tf.cast(scoreLensTensor[:, 1], tf.int32)
         #print(videos.shape)
@@ -65,7 +65,6 @@ class VideoModel(tf.keras.Model):
             sumGLoss, sumHLoss = self.doMap(videos, scores, videoLens)
             totalLoss = sumHLoss + self.l*sumGLoss
         #gradient tape can only do one at a time. 
-        #print("trainable weights: ", len(self.trainable_weights))
         grad = tape.gradient(totalLoss, self.trainable_weights)
         self.optimizer.apply_gradients(zip(grad, self.trainable_weights))
         return {"totalLoss": totalLoss, "sumGLoss":sumGLoss, "sumHLoss":sumHLoss}
@@ -79,7 +78,7 @@ class VideoModel(tf.keras.Model):
         #listLosses is batchSize x 2. 
         #does it broadcast? 
         listLossesWeighted = listLosses * tf.expand_dims(weightTensor, axis=1)
-        print(listLossesWeighted.shape)
+        
         g = listLossesWeighted[:, 0]
         h = listLossesWeighted[:, 1]
         #sumG, sumH = tf.reduce_sum(listLossesWeighted, axis=0)
@@ -91,7 +90,7 @@ class VideoModel(tf.keras.Model):
         video = videoLabelPair[0]
         labels = videoLabelPair[1]
         videoLen = videoLabelPair[2]
-        print("videoLen: ", videoLen)
+       
         gLoss = self.g.compute_loss(video, labels[1], videoLen)
         hLoss = self.h.compute_loss(video, tf.stack([labels[0], labels[2]], axis=0), videoLen)
 
@@ -116,14 +115,17 @@ class VideoModel(tf.keras.Model):
        
         """
         Method to find the max pair. Need to check this method to make sure that the label update step is correct. 
+        3 tensors of the same size. 
+        videoLen is an int maybe. 
         """
         #Time this method. 
         startTime = time.time()
         #videoLen = gValues.shape[0]
         #s1 x sl x s2
-        """
-        validTuples = np.ones(shape = (videoLen, videoLen, videoLen), dtype = bool)
-        print("length of video", videoLen)
+        productArray = tf.tensordot(hInitial, gValues, axes=0)
+        productTensor = tf.tensordot(productArray, hEnd, axes=0)
+
+        validTuples = tf.ones(shape = (videoLen, videoLen, videoLen), dtype = bool).numpy()
         #last 2 indices 0. 
         
         validTuples[videoLen-2:, :, :] = 0
@@ -133,8 +135,7 @@ class VideoModel(tf.keras.Model):
         #this can't be 0 or 1. 
         validTuples[:, :, 0:2]
         #lower triangular, includes center diagonal. 
-        triangleXIndices, triangleYIndices = np.tril_indices(videoLen, k=0)
-        validTuples[triangleXIndices, :, triangleYIndices] = 0
+        
         assert(validTuples[0, 1, 2] == 1)
         assert(validTuples[1, 2, 1] == 0)
         assert(validTuples[2, 1, 2]==0)
@@ -152,20 +153,18 @@ class VideoModel(tf.keras.Model):
         #not sure this gets the values we want. 
         del triangleXIndices
         del triangleYIndices
-        """
-        productArray = tf.tensordot(hInitial, gValues, axes=0)
-        productTensor = tf.tensordot(productArray, hEnd, axes=0)
+        
+        
         del productArray
 
         #assert(productTensor[0, 1, 2] ==hInitial[0]*gValues[1]*hEnd[2])
         #if it works, can multiply by the triangular matrix to get zeros. 
-        #productTensor =  tf.math.multiply(productTensor, validTuples)
+        validTuplesTensor = tf.convert_to_tensor(validTuples, dtype = tf.float32)
+        productTensor*=validTuplesTensor
         #changed shape to dims when going to tf from np
         # del validTuples
         finalIndices =tf.cast(tf.unravel_index(tf.argmax(tf.reshape(productTensor, shape = (-1, )), axis=None), dims = (videoLen, videoLen, videoLen)), tf.int32)
         #finalIndices = tf.unravel_index(tf.argmax(tf.reshape(productTensor, shape=(-1, )), axis=None), dims = productTensor.shape)
-        print(finalIndices)
-        print(finalIndices.shape)
         #assert(finalIndices.shape == (3,))
         del productTensor
         endTime = time.time()
@@ -250,31 +249,20 @@ class ActionClassifier(tf.keras.Model):
         #if label+self.delta = videoLen then end already included. 
         if label+self.delta>videoLen:
             end = videoLen
-        #THIS DOESN'T NEED TENSORFLOW
         #added end + 1 because we DO need the end index here. 
         positiveExampleIndices = tf.range(start = start, limit = end+1, delta = 1, dtype = tf.int32)
 
         negativeExamplesPlus = positiveExampleIndices + self.k
         negativeExamplesMinus = positiveExampleIndices - self.k
-        #print("neg ex plus: ", negativeExamplesPlus)
-        #print("neg ex minus: ", negativeExamplesMinus)
         validNegPlus = negativeExamplesPlus<videoLen
         validNegMinus= negativeExamplesMinus >=0
-        #print("valid neg plus: ", validNegPlus)
-        #print("valid neg minus: ", validNegMinus)
         #the actual value where it's valid, a -1 where it isn't. 
          #changed this so there's correct behavior. Get a -1 if its invalid. 
         examplesPlus =negativeExamplesPlus*tf.cast(validNegPlus, tf.int32) - tf.cast(tf.logical_not(validNegPlus), tf.int32)
-       
         examplesMinus = negativeExamplesMinus*tf.cast(validNegMinus, tf.int32) -tf.cast(tf.logical_not(validNegMinus), tf.int32)
-        #print("examples plus: ", examplesPlus)
-        #print("examplesMinus", examplesMinus)
-        print(examplesPlus.shape)
         examples = tf.concat([examplesPlus, examplesMinus], axis=0)
-        #need to get rid of the -1 as well. 
-        #print("examples: ", examples)
+        #need to get rid of the -1 as well.
         negativeExamples = tf.unique(examples)[0]
-        #print("negative examples: ", negativeExamples)
         #should be sorted in ascending order. 
         if negativeExamples[0]==-1:
             negativeExamples = negativeExamples[1:]
@@ -316,7 +304,7 @@ class StateClassifier(tf.keras.Model):
         maybe make video batch_size x numFeatures x length? Are we going to pad? 
         video is batch_size x length x numFeatures
         """
-        print(labels.shape)
+       
         #videoLen = video.shape[-2]
         initLabelPos, endLabelPos = self.samplePosExamples(videoLen, labels)
         hPos = self(tf.gather(video, initLabelPos, axis=0))

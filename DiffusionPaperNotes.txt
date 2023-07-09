@@ -1,0 +1,5 @@
+Diffusing probabilistic models: 
+Diffusion model - Parameterized markov chain trained using variational inference to produce samples matching the data. 
+Learn the reverse of a diffusion process. 
+diffusion process- add noise to data in opposite direction of sampling until signal is destroyed. 
+W

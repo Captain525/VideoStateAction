@@ -1,0 +1,37 @@
+
+Diffusion
+42. T. Karras, M. Aittala, T. Aila, and S. Laine. Elucidating the design space of diffusion-based generative
+models. arXiv preprint arXiv:2206.00364, 2022.
+34. J. Ho, A. Jain, and P. Abbeel. Denoising diffusion probabilistic models. NeurIPS, 33:6840–6851, 2020. 1,
+3
+35. J. Ho and T. Salimans. Classifier-free diffusion guidance. arXiv preprint arXiv:2207.12598, 2022
+71.STABLE DIFFUSION: R. Rombach, A. Blattmann, D. Lorenz, P. Esser, and B. Ommer. High-resolution image synthesis with
+latent diffusion models, 2021.
+79. Y. Song and S. Ermon. Generative modeling by estimating gradients of the data distribution. NeurIPS, 32,
+2019
+80. Y. Song, J. Sohl-Dickstein, D. P. Kingma, A. Kumar, S. Ermon, and B. Poole. Score-based generative
+modeling through stochastic differential equations. arXiv preprint arXiv:2011.13456, 2020.
+
+Self Supervised learning
+27. J. Gui, T. Chen, Q. Cao, Z. Sun, H. Luo, and D. Tao. A survey of self-supervised learning from multiple
+perspectives: Algorithms, theory, applications and future trends. arXiv preprint arXiv:2301.05712, 2023. 1
+10. M. Caron, H. Touvron, I. Misra, H. Jégou, J. Mairal, P. Bojanowski, and A. Joulin. Emerging properties in
+self-supervised vision transformers. In ICCV, pages 9650–9660, 2021
+Object Tracking 23 93
+23. S. Gao, C. Zhou, C. Ma, X. Wang, and J. Yuan. Aiatrack: Attention in attention for transformer visual
+tracking. In ECCV, pages 146–164. Springer, 2022. 1, 2
+93. B. Yan, Y. Jiang, P. Sun, D. Wang, Z. Yuan, P. Luo, and H. Lu. Towards grand unification of object tracking.
+In ECCV, pages 733–751. Springer, 2022.
+
+Object tracking
+Peter Sand and Seth Teller. Particle video: Long-range motion
+estimation using point trajectories. Int. J. of Computer Vision,
+80:72–91, 2008.
+ Adam W Harley, Zhaoyuan Fang, and Katerina Fragkiadaki.
+Particle video revisited: Tracking through occlusions using
+point trajectories. In Proc. European Conf. on Computer
+Vision (ECCV), pages 59–75. Springer, 2022. 
+3] 
+Laurent Dinh, Jascha Sohl-Dickstein, and Samy Bengio.
+Density estimation using Real NVP. arXiv preprint
+arXiv:1605.08803, 2016. 4

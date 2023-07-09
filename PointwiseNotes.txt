@@ -1,0 +1,59 @@
+Notes for the idea of learning changes of state through the altering of points in a video. 
+
+
+PAPER 1: Emergent correspondence from image diffusion
+Correspondence between images emerges without supevision. Extract
+out of diffusion networks as image features. 
+
+diffusion - self supervised model. Produce good results for image to image translation and image editing even though theyre for image synthesis. ;oio
+idea: Can conveart cat to dog without changing pose, to do this, need to know about correspondence between stuff like dog and cat eyes. 
+Extract correspondences on real images using pre-trained diffusion models.
+
+Pretrained model: noisy -> Clean, UNET. However, Unet trained on noisy images, so it denoises. Thus, we add noise to our imag to use it. Since this already extracts useful features, we're good. 
+DIFT - Diffusion features. Add noise to input image, before passing to UNET to extract feature maps. 
+Does well without fine tuning. 
+Tradition - use hand extracted features like SIFT and SURF. 
+Some methods can find correspondences in supervised learning - too much reliance on ground truth. 
+
+Features generated at different timessteps and different layers of denoising process encode different info. 
+
+SETUP: 
+Two images, I1 and I2, a pixel P1 in I1. Want to find corresponding P2. 
+Relationship between pixels - semantic, geometric, temporal. 
+Straightforward approach - extract dense image features, then match. 
+Fi - dense feature map. Fi(p) - pixel level feature. Bilinear interpolation on Fi. 
+feature map - output for a given filter. Dense means with a dense network on the image i suppose.
+bilinear interpolation - fill blanks between the images. 
+
+
+Diffusion Features - Diffusion models transform normal distribution to an arbitrary data distribution. 
+Training - add gaussian noise to obtain noisy,, this is "diffusion", randomly sampled noise. Forward process. 
+You take the time step and value and predict input noise. Once trained, can use fO to reverse diffusion process. 
+This backwards stepping is called backwards process.
+
+Hypothesis - diffusion models learn correspondence implicitly. 
+Methodology - focus on generated images, access internal state of network. 
+Use stableDiffusion. 
+
+To each genned imag - extract feature maps of intermediate layers, then use them to establish correspondences between 2 generated images. 
+Pick the intermediate layer at a certain time step. 
+Establish correspondence between the intermediate step/iamge. 
+
+How to do for real images? Problem - real image doesn't belong to noisy training distribution, and don't have access to intermediate noisy images. 
+Solution: approximate forward diffusion. 
+Add noise of time step t to the real image. Moving it to xt dist. Feed it to network with t to get intermediate layer activations as diffusion features. 
+Consider: Time step t, and network layer to get features. 
+larger t and earlier network layer have more semantically aware features, smaller t and later alyer are more low level. 
+Semantic correspondence - want more semantic features. Geometric - want more low level features. 
+Use 2d grid search to determine hyper parameters. 
+Extract features from multiple noisy versions with different samples of noise, and average them. 
+
+HOw to use dift to have simmilar semantic meanings: 
+use to models - Stable diffusion, ablated diffusion model. 
+Benchmarks - SPair 71k, PF-WILLOW, CUB2002011. Semantic correspondence datasets. 
+Evaluation metric - percentage of correct keypoints: 
+correct if within alpha*max(h,w) pixels from ground truth for alpha in 0,1. 
+h,w heigh of image or bounding box. 
+
+
+DESIRE - TEMPORAL CORRESPONDENCE. 

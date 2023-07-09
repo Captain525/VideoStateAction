@@ -6,6 +6,7 @@ import os
 from extractor import  extractSimple, justExtractAndSave, callTransformAndFeatureExtract
 import pandas as pd
 from saveLoad import loadNamesCategory, loadCategoryData, loadCenteringParams
+import numpy as np
 
 def loadVideos(category):
     csvLink = os.getcwd() + "/ChangeIt/ChangeIt-main/videos/" + category + ".csv"
@@ -72,6 +73,43 @@ def extractFramesCategory(category):
 def testCallTransformAndFeatureExtract(category):
     callTransformAndFeatureExtract(category)
 def testLoadCategory():
-    category = "Apple"
+    category = "Tree"
     count = loadVideos(category)
-testCallTransformAndFeatureExtract("Apple")
+def loadTimes():
+    """
+    Load the times from the document. 
+    """
+    link = os.getcwd() + "/beforeAfterTimes.txt"
+    dictionary = {}
+    with open(link) as f:
+        lines = f.readlines()
+        for i in range(len(lines)):
+            splitLine = lines[i].split(",")
+            name = splitLine[0]
+            initialValue = int(splitLine[1])
+            print("initial value: ", initialValue)
+            finalValue = int(splitLine[2])
+            print("final value: ", finalValue)
+            dictionary[name] = [initialValue, finalValue]
+    print(dictionary)
+    return dictionary
+def loadFramesForTimes(dictionary):
+    """
+    load the beginning and end frame to run in the dift model. 
+    """
+    listNames = dictionary.keys()
+    listFrameTuples = []
+    for name in listNames:
+        timeList = dictionary[name]
+        beginningTime = timeList[0]
+        endTime = timeList[1]
+        link = os.getcwd() + "/Frames/" + name + ".npy"
+        videoFrames = np.load(link)
+        beginningFrame = videoFrames[beginningTime]
+        endFrame = videoFrames[endTime]
+        tupleFrames = (beginningFrame, endFrame)
+        listFrameTuples.append(tupleFrames)
+
+    return listFrameTuples
+        
+loadTimes()
